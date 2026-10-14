@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABYSSAL SINGULARITY // 1,000,000 GPGPU Bioluminescent Boids Galaxy</title>
+<style>
+  :root {
+    --cyan: #00f2fe;
+    --blue: #4facfe;
+    --gold: #ffd269;
+    --panel-bg: rgba(4, 10, 22, 0.72);
+    --border-glow: rgba(0, 242, 254, 0.3);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    overflow: hidden;
+    background: #010308;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: #e0f4ff;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    cursor: crosshair;
+  }
+
+  /* Top Left HUD */
+  .hud-header {
+    position: fixed;
+    top: 24px;
+    left: 28px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .hud-tag {
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: var(--cyan);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    text-shadow: 0 0 10px rgba(0, 242, 254, 0.6);
+  }
+  .hud-title {
+    font-size: 24px;
+    font-weight: 300;
+    letter-spacing: 3px;
+    color: #ffffff;
+    text-shadow: 0 0 25px rgba(0, 242, 254, 0.45);
+  }
+  .hud-metrics {
+    margin-top: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: rgba(224, 244, 255, 0.7);
+    line-height: 1.65;
+    border-left: 2px solid var(--cyan);
+    padding-left: 12px;
+  }
+  .hud-metrics span {
+    color: var(--gold);
+    font-weight: bold;
+  }
+
+  /* Charge Bar for Singularity Hold */
+  .charge-container {
+    position: fixed;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 280px;
+    pointer-events: none;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    text-align: center;
+  }
+  .charge-container.visible { opacity: 1; }
+  .charge-label {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--gold);
+    margin-bottom: 6px;
+    text-shadow: 0 0 12px var(--gold);
+  }
+  .charge-bar-bg {
+    width: 100%;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 210, 105, 0.4);
+  }
+  .charge-bar-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--cyan), var(--gold), #ff3366);
+    box-shadow: 0 0 15px var(--gold);
+  }
+
+  /* Guide Toast */
+  .guide-toast {
+    position: fixed;
+    bottom: 110px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(2, 8, 18, 0.75);
+    border: 1px solid rgba(0, 242, 254, 0.25);
+    padding: 8px 20px;
+    border-radius: 30px;
+    font-size: 12px;
+    letter-spacing: 1.2px;
+    color: rgba(255, 255, 255, 0.85);
+    pointer-events: none;
+    z-index: 10;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+  }
+  .guide-toast b { color: var(--cyan); }
+  .guide-toast em { color: var(--gold); font-style: normal; font-weight: bold; }
+
+  /* Bottom Control Dock */
+  .control-dock {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-glow);
+    border-radius: 12px;
+    padding: 12px 18px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    z-index: 10;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 242, 254, 0.12);
+    max-width: 95vw;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .btn {
+    background: rgba(0, 242, 254, 0.08);
+    border: 1px solid rgba(0, 242, 254, 0.3);
+    color: #e0f4ff;
+    padding: 9px 14px;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.22s ease;
+    font-weight: 600;
+  }
+  .btn:hover {
+    background: rgba(0, 242, 254, 0.22);
+    border-color: var(--cyan);
+    box-shadow: 0 0 15px rgba(0, 242, 254, 0.35);
+  }
+  .btn.active {
+    background: linear-gradient(135deg, rgba(0, 242, 254, 0.35), rgba(79, 172, 254, 0.25));
+    border-color: var(--gold);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(255, 210, 105, 0.35);
+  }
+  .btn-nova {
+    background: linear-gradient(135deg, rgba(255, 210, 105, 0.25), rgba(255, 60, 120, 0.25));
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+  .btn-nova:hover {
+    background: linear-gradient(135deg, rgba(255, 210, 105, 0.5), rgba(255, 60, 120, 0.45));
+    color: #fff;
+    box-shadow: 0 0 20px rgba(255, 210, 105, 0.6);
+  }
+
+  @media (max-width: 700px) {
+    .hud-title { font-size: 18px; }
+    .guide-toast { font-size: 10px; bottom: 135px; padding: 6px 12px; }
+    .btn { padding: 8px 10px; font-size: 10px; }
+  }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div class="hud-header">
+  <div class="hud-tag">GPGPU Ping-Pong FBO // Stochastic Flocking &amp; Curl Field</div>
+  <div class="hud-title">BIOLUMINESCENT BOIDS GALAXY</div>
+  <div class="hud-metrics">
+    POPULATION: <span id="hud-count">1,000,000 ENTITIES (1000×1000 FBO)</span><br>
+    FORMATION: <span id="hud-mode">ABYSSAL VORTEX SWARM</span><br>
+    FIELD STATE: <span id="hud-state">FREE FLOCKING</span> | FPS: <span id="hud-fps">60</span>
+  </div>
+</div>
+
+<div class="charge-container" id="charge-ui">
+  <div class="charge-label" id="charge-text">SINGULARITY CONVERGENCE: 0%</div>
+  <div class="charge-bar-bg">
+    <div class="charge-bar-fill" id="charge-fill"></div>
+  </div>
+</div>
+
+<div class="guide-toast">
+  <b>マウス移動</b>: 群れを誘導 ／ <em>左クリック長押し</em>: ブラックホール凝縮 → <em>離す</em>: 超新星爆発 ／ <b>右ドラッグ</b>: 視点回転
+</div>
+
+<div class="control-dock">
+  <button class="btn active" id="btn-mode">FORMATION: VORTEX (渦銀河)</button>
+  <button class="btn" id="btn-theme">PALETTE: ABYSS (深海発光)</button>
+  <button class="btn btn-nova" id="btn-shock">SUPERNOVA PULSE (超新星爆発)</button>
+  <button class="btn" id="btn-density">SCALE: 1,000,000 (100万匹)</button>
+  <button class="btn" id="btn-sound">SONAR AUDIO: OFF</button>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GPUComputationRenderer } from 'three/addons/misc/GPUComputationRenderer.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// ============================================================================
+// 1. GPGPU SIMULATION shaders (1,000 x 1,000 = 1,000,000 BOIDS)
+// ============================================================================
+
+const fragmentShaderPosition = /* glsl */`
+  uniform float uDelta;
+  uniform float uTime;
+
+  void main() {
+    vec2 uv = gl_FragCoord.xy / resolution.xy;
+    vec4 posData = texture2D(texturePosition, uv);
+    vec4 velData = texture2D(textureVelocity, uv);
+
+    vec3 pos = posData.xyz;
+    vec3 vel = velData.xyz;
+    float phase = posData.w;
+
+    // Advance position by velocity
+    pos += vel * uDelta;
+
+    // Soft spherical boundary confinement (prevent escaping to infinity)
+    float dist = length(pos);
+    if (dist > 140.0) {
+      pos *= 139.0 / dist;
+    }
+
+    // Advance individual tail-swimming phase proportional to speed
+    float speed = length(vel);
+    phase = mod(phase + uDelta * (4.0 + speed * 0.35), 62.831853);
+
+    gl_FragColor = vec4(pos, phase);
+  }
+`;
+
+const fragmentShaderVelocity = /* glsl */`
+  uniform float uTime;
+  uniform float uDelta;
+  uniform vec3 uMousePos;
+  uniform vec3 uMouseVel;
+  uniform float uMouseActive;
+  uniform float uCharge;       // 0.0 -> 1.0 during click hold
+  uniform float uShockwave;    // > 0.0 on supernova release
+  uniform int uFormation;      // 0: Galaxy Vortex, 1: Baitball Sphere, 2: Twin Leviathan Helix
+
+  // Fast, artifact-free 3D hash & Simplex-like procedural noise for Curl Flow
+  vec3 hash33(vec3 p3) {
+    p3 = fract(p3 * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yxz + 33.33);
+    return fract((p3.xxy + p3.yxx) * p3.zyx) * 2.0 - 1.0;
+  }
+
+  float noise3D(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    vec3 u = f * f * (3.0 - 2.0 * f);
+
+    return mix(
+      mix(
+        mix(dot(hash33(i + vec3(0,0,0)), f - vec3(0,0,0)),
+            dot(hash33(i + vec3(1,0,0)), f - vec3(1,0,0)), u.x),
+        mix(dot(hash33(i + vec3(0,1,0)), f - vec3(0,1,0)),
+            dot(hash33(i + vec3(1,1,0)), f - vec3(1,1,0)), u.x), u.y),
+      mix(
+        mix(dot(hash33(i + vec3(0,0,1)), f - vec3(0,0,1)),
+            dot(hash33(i + vec3(1,0,1)), f - vec3(1,0,1)), u.x),
+        mix(dot(hash33(i + vec3(0,1,1)), f - vec3(0,1,1)),
+            dot(hash33(i + vec3(1,1,1)), f - vec3(1,1,1)), u.x), u.y), u.z);
+  }
+
+  // Divergence-free 3D Curl Noise for organic oceanic turbulence
+  vec3 curlNoise(vec3 p) {
+    const float e = 0.15;
+    vec3 dx = vec3(e, 0.0, 0.0);
+    vec3 dy = vec3(0.0, e, 0.0);
+    vec3 dz = vec3(0.0, 0.0, e);
+
+    float n_y1 = noise3D(p + dy);
+    float n_y0 = noise3D(p - dy);
+    float n_z1 = noise3D(p + dz);
+    float n_z0 = noise3D(p - dz);
+    float n_x1 = noise3D(p + dx);
+    float n_x0 = noise3D(p - dx);
+
+    float x = (n_y1 - n_y0) - (n_z1 - n_z0);
+    float y = (n_z1 - n_z0) - (n_x1 - n_x0);
+    float z = (n_x1 - n_x0) - (n_y1 - n_y0);
+
+    float len = length(vec3(x, y, z));
+    return len > 1e-5 ? vec3(x, y, z) / len : vec3(0.0, 1.0, 0.0);
+  }
+
+  vec3 safeNormalize(vec3 v) {
+    float l = length(v);
+    return l > 1e-5 ? v / l : vec3(0.0, 1.0, 0.0);
+  }
+
+  void main() {
+    vec2 uv = gl_FragCoord.xy / resolution.xy;
+    vec4 posData = texture2D(texturePosition, uv);
+    vec4 velData = texture2D(textureVelocity, uv);
+
+    vec3 pos = posData.xyz;
+    vec3 vel = velData.xyz;
+
+    // Individual trait variation derived from UV coordinates
+    float idHash = fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453);
+    vec3 accel = vec3(0.0);
+
+    // ------------------------------------------------------------------------
+    // A. STOCHASTIC NEIGHBOR SAMPLING (BOIDS ALIGNMENT, COHESION, SEPARATION)
+    // ------------------------------------------------------------------------
+    vec3 alignForce = vec3(0.0);
+    vec3 cohesionForce = vec3(0.0);
+    vec3 separationForce = vec3(0.0);
+
+    // Sample 6 rotating/jittered neighbors in FBO texture space per frame
+    for (int i = 0; i < 6; i++) {
+      float fi = float(i);
+      float angle = uTime * 1.7 + fi * 1.047197 + idHash * 6.28318;
+      float radius = (1.5 + fi * 2.2) / resolution.x;
+      vec2 sampleUV = fract(uv + vec2(cos(angle), sin(angle)) * radius);
+
+      vec3 nPos = texture2D(texturePosition, sampleUV).xyz;
+      vec3 nVel = texture2D(textureVelocity, sampleUV).xyz;
+      vec3 diff = nPos - pos;
+      float d2 = dot(diff, diff);
+
+      if (d2 > 0.0001 && d2 < 220.0) {
+        float d = sqrt(d2);
+        // Separation when too close
+        if (d < 3.8) {
+          separationForce -= (diff / d) * ((3.8 - d) / 3.8);
+        }
+        // Alignment with neighbor velocity
+        alignForce += safeNormalize(nVel);
+        // Cohesion toward neighbor position
+        cohesionForce += diff * 0.05;
+      }
+    }
+
+    accel += separationForce * 16.0;
+    accel += alignForce * 5.5;
+    accel += cohesionForce * 1.8;
+
+    // ------------------------------------------------------------------------
+    // B. MACROSCOPIC FORMATION ATTRACTORS
+    // ------------------------------------------------------------------------
+    float rXZ = length(pos.xz) + 0.001;
+    vec3 tangentXZ = vec3(-pos.z / rXZ, 0.0, pos.x / rXZ);
+
+    if (uFormation == 0) {
+      // Mode 0: Spiral Galaxy & Toroidal Abyssal Vortex
+      float targetR = 24.0 + 14.0 * sin(idHash * 6.2831 + uTime * 0.25);
+      float radialPull = (targetR - rXZ) * 0.45;
+      accel += vec3(pos.x / rXZ, 0.0, pos.z / rXZ) * radialPull;
+      accel += tangentXZ * (14.0 + 8.0 * sin(rXZ * 0.12 - uTime * 0.6));
+      // Gentle vertical wave disc
+      float waveY = sin(rXZ * 0.18 - uTime * 1.2) * cos(atan(pos.z, pos.x) * 2.0 + uTime * 0.4) * 5.5;
+      accel.y += (waveY - pos.y) * 1.6;
+
+    } else if (uFormation == 1) {
+      // Mode 1: Dense Oceanic Baitball (Spherical Milling Swarm)
+      float distCenter = length(pos) + 0.001;
+      float shellR = 19.0 + 5.0 * sin(uTime * 0.8 + idHash * 6.28);
+      accel += (-pos / distCenter) * (distCenter - shellR) * 1.8;
+      // Tilted 3D rotational milling currents
+      vec3 axis1 = safeNormalize(vec3(sin(uTime * 0.3), cos(uTime * 0.2), sin(uTime * 0.4)));
+      accel += cross(axis1, pos / distCenter) * 18.0;
+
+    } else {
+      // Mode 2: Double Helix Leviathan Streams
+      float streamSign = idHash > 0.5 ? 1.0 : -1.0;
+      float hAngle = pos.y * 0.14 + uTime * 1.1 + (streamSign > 0.0 ? 0.0 : 3.14159);
+      vec3 spine = vec3(cos(hAngle) * 20.0, pos.y, sin(hAngle) * 20.0);
+      accel += (spine - pos) * 1.8;
+      vec3 helixTangent = safeNormalize(vec3(-sin(hAngle) * 2.8, streamSign * 1.2, cos(hAngle) * 2.8));
+      accel += helixTangent * 20.0;
+      if (abs(pos.y) > 36.0) {
+        accel.y -= sign(pos.y) * 25.0;
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // C. MULTI-SCALE 3D CURL NOISE (BIOLOGICAL TURBULENCE)
+    // ------------------------------------------------------------------------
+    vec3 curl = curlNoise(pos * 0.055 + vec3(0.0, uTime * 0.18, uTime * 0.12));
+    accel += curl * 15.0;
+
+    // ------------------------------------------------------------------------
+    // D. INTERACTIVE CURSOR, BLACK HOLE SINGULARITY & SUPERNOVA SHOCKWAVE
+    // ------------------------------------------------------------------------
+    vec3 toMouse = uMousePos - pos;
+    float mouseDist = length(toMouse) + 0.001;
+    vec3 mouseDir = toMouse / mouseDist;
+
+    if (uCharge > 0.01) {
+      // SINGULARITY HOLD: Intense gravitational vortex pulling all 1,000,000 fish inward
+      vec3 swirlTangent = safeNormalize(cross(mouseDir, vec3(0.15, 1.0, 0.1)));
+      float pullStrength = (45.0 + uCharge * 115.0) / (1.0 + mouseDist * 0.018);
+      float swirlStrength = (38.0 + uCharge * 85.0) / (1.0 + mouseDist * 0.035);
+
+      // Keep a glowing event-horizon shell around the cursor
+      if (mouseDist < 3.2) {
+        accel -= mouseDir * 60.0;
+      } else {
+        accel += mouseDir * pullStrength;
+      }
+      accel += swirlTangent * swirlStrength;
+
+    } else if (uMouseActive > 0.5) {
+      // NORMAL CURSOR INTERACTION: Dynamic Predator/Leader Ripple
+      float cursorSpeed = length(uMouseVel);
+      if (mouseDist < 9.5) {
+        // Inner core parts dramatically when cursor cuts through the school
+        float repel = (9.5 - mouseDist) / 9.5;
+        accel -= mouseDir * (repel * repel * (55.0 + cursorSpeed * 1.5));
+        accel += uMouseVel * repel * 0.8;
+      } else if (mouseDist < 48.0) {
+        // Outer school swirls and follows the bioluminescent lure
+        vec3 vortexDir = safeNormalize(cross(mouseDir, vec3(0.0, 1.0, 0.0)));
+        float attract = 1.0 - (mouseDist - 9.5) / 38.5;
+        accel += mouseDir * attract * 26.0;
+        accel += vortexDir * attract * 28.0;
+      }
+    }
+
+    // SUPERNOVA BURST RELEASE: Radial relativistic shockwave
+    if (uShockwave > 0.001) {
+      float waveRadius = (1.0 - uShockwave) * 75.0;
+      float band = exp(- abs(mouseDist - waveRadius) * 0.12);
+      vec3 burstDir = safeNormalize(pos - uMousePos + hash33(pos) * 0.25);
+      accel += burstDir * uShockwave * (160.0 + 180.0 * band);
+    }
+
+    // ------------------------------------------------------------------------
+    // E. INTEGRATE VELOCITY & CALCULATE "FLASHING" ACCELERATION INTENSITY
+    // ------------------------------------------------------------------------
+    float turnFlash = clamp(length(accel) * 0.018, 0.0, 1.0);
+
+    vel += accel * uDelta;
+
+    // Viscous water drag & speed clamping
+    vel *= (1.0 - 0.85 * uDelta);
+    float maxSpeed = 24.0 + uCharge * 22.0 + uShockwave * 42.0 + idHash * 6.0;
+    float minSpeed = 5.5;
+    float currentSpeed = length(vel);
+
+    if (currentSpeed > maxSpeed) {
+      vel = (vel / currentSpeed) * maxSpeed;
+    } else if (currentSpeed < minSpeed) {
+      vel = safeNormalize(vel + vec3(0.001, 0.002, -0.001)) * minSpeed;
+    }
+
+    // Smoothly blend turn-flash intensity into w channel for specular fish shimmer
+    float smoothedFlash = mix(velData.w, turnFlash, clamp(uDelta * 8.0, 0.0, 1.0));
+    gl_FragColor = vec4(vel, smoothedFlash);
+  }
+`;
+
+// ============================================================================
+// 2. PARTICLE RENDERING SHADERS (DIRECTIONAL BIOLUMINESCENT FISH SILHOUETTES)
+// ============================================================================
+
+const particleVertexShader = /* glsl */`
+  uniform sampler2D texturePosition;
+  uniform sampler2D textureVelocity;
+  uniform float uTime;
+  uniform float uPixelRatio;
+  uniform float uCharge;
+  uniform float uShockwave;
+  uniform int uPalette;
+
+  varying vec3 vColor;
+  varying vec2 vDir2D;
+  varying float vPhase;
+  varying float vAlpha;
+
+  void main() {
+    // Decode particle UV from gl_VertexID (Zero vertex attribute memory overhead!)
+    vec2 uv = position.xy;
+
+    vec4 posData = texture2D(texturePosition, uv);
+    vec4 velData = texture2D(textureVelocity, uv);
+
+    vec3 pos = posData.xyz;
+    vec3 vel = velData.xyz;
+    vPhase = posData.w;
+    float flash = velData.w;
+
+    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+
+    // Project 3D velocity vector into 2D screen space so each sprite aligns with its swimming direction
+    vec3 viewVel = mat3(modelViewMatrix) * vel;
+    vec2 screenDir = viewVel.xy;
+    float dirLen = length(screenDir);
+    vDir2D = dirLen > 0.001 ? screenDir / dirLen : vec2(1.0, 0.0);
+
+    float speedNorm = clamp(length(vel) / 32.0, 0.0, 1.0);
+    float dist = max(-mvPosition.z, 1.0);
+
+    // Dynamic point size: larger when close or flashing, crisp micro-fish at distance
+    float baseSize = (115.0 / dist) * uPixelRatio * (0.75 + 0.55 * speedNorm + 0.35 * flash);
+    gl_PointSize = clamp(baseSize, 1.35, 16.0);
+
+    // Bioluminescent Color Palettes
+    vec3 cSlow, cMed, cFast, cFlash;
+    if (uPalette == 0) {
+      // Palette 0: Deep Abyssal Bioluminescence (Cobalt -> Electric Cyan -> Gold Flash)
+      cSlow  = vec3(0.03, 0.18, 0.58);
+      cMed   = vec3(0.00, 0.78, 0.96);
+      cFast  = vec3(0.45, 1.00, 0.88);
+      cFlash = vec3(1.00, 0.88, 0.45);
+    } else if (uPalette == 1) {
+      // Palette 1: Celestial Supernova (Deep Violet -> Amber Gold -> White Core)
+      cSlow  = vec3(0.28, 0.05, 0.48);
+      cMed   = vec3(0.95, 0.32, 0.18);
+      cFast  = vec3(1.00, 0.78, 0.22);
+      cFlash = vec3(1.00, 0.98, 0.90);
+    } else {
+      // Palette 2: Neon Trench (Midnight Indigo -> Magenta -> Cyber Lime)
+      cSlow  = vec3(0.08, 0.04, 0.42);
+      cMed   = vec3(0.92, 0.08, 0.68);
+      cFast  = vec3(0.00, 0.98, 0.75);
+      cFlash = vec3(0.85, 1.00, 0.35);
+    }
+
+    vec3 col = mix(cSlow, cMed, smoothstep(0.0, 0.55, speedNorm));
+    col = mix(col, cFast, smoothstep(0.45, 1.0, speedNorm));
+    // Rapid turning triggers metallic scale reflection ("sardine flash")
+    col = mix(col, cFlash, smoothstep(0.25, 0.92, flash) * 0.85);
+    // Singularity & Shockwave energy boost
+    col += vec3(0.35, 0.25, 0.05) * (uCharge * 0.6 + uShockwave * 0.9);
+
+    vColor = col;
+    vAlpha = clamp((135.0 - dist) / 95.0, 0.12, 0.92);
+  }
+`;
+
+const particleFragmentShader = /* glsl */`
+  varying vec3 vColor;
+  varying vec2 vDir2D;
+  varying float vPhase;
+  varying float vAlpha;
+
+  void main() {
+    // Center point coordinate in [-1, 1]
+    vec2 p = gl_PointCoord * 2.0 - 1.0;
+    p.y = -p.y; // Flip Y to match screen space
+
+    // Rotate coordinate frame to align with the fish's 2D swimming velocity vector
+    vec2 forward = vDir2D;
+    vec2 perp = vec2(-forward.y, forward.x);
+    vec2 local = vec2(dot(p, forward), dot(p, perp));
+
+    // Add sinusoidal tail undulation along body length
+    float wave = sin(vPhase - local.x * 4.2) * 0.16 * (1.0 - smoothstep(-0.8, 0.5, local.x));
+    local.y += wave;
+
+    // Teardrop / streamlined fish body envelope (wider head at +x, tapered tail at -x)
+    float bodyHalfWidth = mix(0.10, 0.42, smoothstep(-0.95, 0.45, local.x));
+    bodyHalfWidth *= (1.0 - smoothstep(0.45, 0.95, local.x) * 0.65);
+
+    vec2 scaled = vec2(local.x * 1.05, local.y / max(bodyHalfWidth, 0.08));
+    float d = length(scaled);
+    if (d > 1.0) discard;
+
+    // Bright bioluminescent head organ + soft glowing tail trail
+    float headGlow = exp(-length(local - vec2(0.32, 0.0)) * 3.6);
+    float bodyGlow = pow(1.0 - d, 1.75);
+    float intensity = bodyGlow * 0.75 + headGlow * 0.85;
+
+    gl_FragColor = vec4(vColor * intensity, intensity * vAlpha);
+  }
+`;
+
+// ============================================================================
+// 3. THREE.JS SCENE, GPGPU INITIALIZATION & POST-PROCESSING
+// ============================================================================
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x010308);
+scene.fog = new THREE.FogExp2(0x010308, 0.0085);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 300);
+camera.position.set(0, 26, 62);
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.rotateSpeed = 0.6;
+controls.maxDistance = 140;
+controls.minDistance = 8;
+// Use Right Mouse Button or Two-Finger Touch for camera orbit so Left Click is dedicated to Singularity/Swarm control
+controls.mouseButtons = {
+  LEFT: null,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.ROTATE
+};
+
+// Post-Processing: UnrealBloomPass for radiant deep-sea bioluminescence
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.85, // bloom strength
+  0.55, // radius
+  0.22  // threshold
+);
+composer.addPass(bloomPass);
+
+// GPGPU Grid Size: 1000 x 1000 = 1,000,000 Entities
+const WIDTH = 1000;
+const TOTAL_BOIDS = WIDTH * WIDTH;
+
+const gpuCompute = new GPUComputationRenderer(WIDTH, WIDTH, renderer);
+// Use HalfFloatType for maximum bandwidth (60fps with 1,000,000 particles)
+gpuCompute.setDataType(THREE.HalfFloatType);
+
+const dtPosition = gpuCompute.createTexture();
+const dtVelocity = gpuCompute.createTexture();
+
+// Seed initial 1,000,000 positions & velocities in a spiral galaxy torus
+function initBoidsTextures(posTex, velTex) {
+  const posArray = posTex.image.data;
+  const velArray = velTex.image.data;
+
+  for (let i = 0; i < TOTAL_BOIDS; i++) {
+    const idx = i * 4;
+    const arm = i % 3;
+    const u = Math.random();
+    const r = 4.0 + Math.pow(u, 0.65) * 42.0;
+    const angle = u * Math.PI * 4.0 + (arm * Math.PI * 2.0) / 3.0 + (Math.random() - 0.5) * 0.8;
+    const ySpread = (Math.random() - 0.5) * 14.0 * Math.exp(-r * 0.03);
+
+    const x = Math.cos(angle) * r;
+    const y = ySpread;
+    const z = Math.sin(angle) * r;
+
+    posArray[idx + 0] = x;
+    posArray[idx + 1] = y;
+    posArray[idx + 2] = z;
+    posArray[idx + 3] = Math.random() * 62.83; // Initial swimming tail phase
+
+    // Initial orbital velocity
+    const speed = 10.0 + Math.random() * 6.0;
+    velArray[idx + 0] = -Math.sin(angle) * speed;
+    velArray[idx + 1] = (Math.random() - 0.5) * 2.0;
+    velArray[idx + 2] = Math.cos(angle) * speed;
+    velArray[idx + 3] = 0.0; // Flash intensity
+  }
+}
+
+initBoidsTextures(dtPosition, dtVelocity);
+
+const positionVariable = gpuCompute.addVariable('texturePosition', fragmentShaderPosition, dtPosition);
+const velocityVariable = gpuCompute.addVariable('textureVelocity', fragmentShaderVelocity, dtVelocity);
+
+gpuCompute.setVariableDependencies(positionVariable, [positionVariable, velocityVariable]);
+gpuCompute.setVariableDependencies(velocityVariable, [positionVariable, velocityVariable]);
+
+const posUniforms = positionVariable.material.uniforms;
+posUniforms.uDelta = { value: 0.016 };
+posUniforms.uTime = { value: 0.0 };
+
+const velUniforms = velocityVariable.material.uniforms;
+velUniforms.uTime = { value: 0.0 };
+velUniforms.uDelta = { value: 0.016 };
+velUniforms.uMousePos = { value: new THREE.Vector3(0, 0, 0) };
+velUniforms.uMouseVel = { value: new THREE.Vector3(0, 0, 0) };
+velUniforms.uMouseActive = { value: 0.0 };
+velUniforms.uCharge = { value: 0.0 };
+velUniforms.uShockwave = { value: 0.0 };
+velUniforms.uFormation = { value: 0 };
+
+const error = gpuCompute.init();
+if (error !== null) {
+  console.error('GPGPU Init Error:', error);
+}
+
+// Build 1,000,000 Point Geometry (UV coordinates stored in position.xy)
+const boidGeometry = new THREE.BufferGeometry();
+const uvs = new Float32Array(TOTAL_BOIDS * 3);
+let p = 0;
+for (let j = 0; j < WIDTH; j++) {
+  for (let i = 0; i < WIDTH; i++) {
+    uvs[p++] = (i + 0.5) / WIDTH;
+    uvs[p++] = (j + 0.5) / WIDTH;
+    uvs[p++] = 0;
+  }
+}
+boidGeometry.setAttribute('position', new THREE.BufferAttribute(uvs, 3));
+
+const boidMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    texturePosition: { value: null },
+    textureVelocity: { value: null },
+    uTime: { value: 0.0 },
+    uPixelRatio: { value: renderer.getPixelRatio() },
+    uCharge: { value: 0.0 },
+    uShockwave: { value: 0.0 },
+    uPalette: { value: 0 }
+  },
+  vertexShader: particleVertexShader,
+  fragmentShader: particleFragmentShader,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending
+});
+
+const boidParticles = new THREE.Points(boidGeometry, boidMaterial);
+boidParticles.frustumCulled = false;
+scene.add(boidParticles);
+
+// Visual Interactive Singularity Core Ring (Follows 3D Cursor)
+const cursorCoreGeo = new THREE.SphereGeometry(0.65, 24, 24);
+const cursorCoreMat = new THREE.MeshBasicMaterial({
+  color: 0x00f2fe,
+  transparent: true,
+  opacity: 0.35,
+  blending: THREE.AdditiveBlending
+});
+const cursorCoreMesh = new THREE.Mesh(cursorCoreGeo, cursorCoreMat);
+scene.add(cursorCoreMesh);
+
+// ============================================================================
+// 4. PROCEDURAL DEEP-SEA AMBIENT & SINGULARITY SYNTHESIZER (WEB AUDIO API)
+// ============================================================================
+let audioCtx = null;
+let soundEnabled = false;
+let droneOsc1 = null, droneOsc2 = null, droneGain = null, filterNode = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  droneOsc1 = audioCtx.createOscillator();
+  droneOsc2 = audioCtx.createOscillator();
+  filterNode = audioCtx.createBiquadFilter();
+  droneGain = audioCtx.createGain();
+
+  droneOsc1.type = 'sine';
+  droneOsc2.type = 'triangle';
+  droneOsc1.frequency.value = 55.0; // Deep A1 oceanic sub-bass
+  droneOsc2.frequency.value = 110.5;
+
+  filterNode.type = 'lowpass';
+  filterNode.frequency.value = 220;
+  filterNode.Q.value = 4.0;
+
+  droneGain.gain.value = 0.0;
+
+  droneOsc1.connect(filterNode);
+  droneOsc2.connect(filterNode);
+  filterNode.connect(droneGain);
+  droneGain.connect(audioCtx.destination);
+
+  droneOsc1.start();
+  droneOsc2.start();
+}
+
+function triggerSupernovaSound(intensity = 1.0) {
+  if (!soundEnabled || !audioCtx) return;
+  const now = audioCtx.currentTime;
+
+  // Sub-bass shockwave boom + shimmering harmonic chime
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(180 * intensity + 90, now);
+  osc.frequency.exponentialRampToValueAtTime(28, now + 1.4);
+
+  const lpf = audioCtx.createBiquadFilter();
+  lpf.type = 'lowpass';
+  lpf.frequency.setValueAtTime(1800, now);
+  lpf.frequency.exponentialRampToValueAtTime(80, now + 1.4);
+
+  gain.gain.setValueAtTime(0.22 * Math.min(1.0, intensity + 0.3), now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
+
+  osc.connect(lpf);
+  lpf.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start(now);
+  osc.stop(now + 1.5);
+}
+
+// ============================================================================
+// 5. 3D RAYCAST INTERACTION & UI STATE MANAGEMENT
+// ============================================================================
+const raycaster = new THREE.Raycaster();
+const mouseNDC = new THREE.Vector2(0, 0);
+const targetPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const currentMouse3D = new THREE.Vector3(0, 0, 0);
+const prevMouse3D = new THREE.Vector3(0, 0, 0);
+const mouseVel3D = new THREE.Vector3(0, 0, 0);
+
+let isPointerDown = false;
+let mouseIdleTimer = 0;
+let chargeLevel = 0.0;
+let shockwaveLevel = 0.0;
+
+function updateMouse3D(clientX, clientY) {
+  mouseNDC.x = (clientX / window.innerWidth) * 2 - 1;
+  mouseNDC.y = -(clientY / window.innerHeight) * 2 + 1;
+
+  // Align interaction plane perpendicular to camera view direction passing through origin
+  const camDir = new THREE.Vector3();
+  camera.getWorldDirection(camDir);
+  targetPlane.setFromNormalAndCoplanarPoint(camDir, new THREE.Vector3(0, 0, 0));
+
+  raycaster.setFromCamera(mouseNDC, camera);
+  const hitPoint = new THREE.Vector3();
+  if (raycaster.ray.intersectPlane(targetPlane, hitPoint)) {
+    currentMouse3D.copy(hitPoint);
+  }
+  velUniforms.uMouseActive.value = 1.0;
+  mouseIdleTimer = 0.0;
+}
+
+window.addEventListener('pointermove', (e) => {
+  updateMouse3D(e.clientX, e.clientY);
+});
+
+window.addEventListener('pointerdown', (e) => {
+  if (e.button === 0 && !e.target.closest('.control-dock')) {
+    isPointerDown = true;
+    updateMouse3D(e.clientX, e.clientY);
+    document.getElementById('charge-ui').classList.add('visible');
+    document.getElementById('hud-state').textContent = 'SINGULARITY COLLAPSE';
+  }
+});
+
+window.addEventListener('pointerup', (e) => {
+  if (isPointerDown) {
+    isPointerDown = false;
+    document.getElementById('charge-ui').classList.remove('visible');
+    // Trigger Supernova Burst proportional to hold charge (minimum 0.65 for instant click satisfaction)
+    shockwaveLevel = Math.max(0.65, chargeLevel * 1.25);
+    triggerSupernovaSound(chargeLevel);
+    chargeLevel = 0.0;
+    document.getElementById('hud-state').textContent = 'SUPERNOVA SHOCKWAVE';
+  }
+});
+
+// UI Buttons
+const formations = [
+  { name: 'VORTEX (渦銀河)', hud: 'ABYSSAL VORTEX SWARM' },
+  { name: 'BAITBALL (巨大魚群球)', hud: 'OCEANIC BAITBALL SPHERE' },
+  { name: 'LEVIATHAN (二重螺旋)', hud: 'TWIN LEVIATHAN HELIX' }
+];
+let currentFormation = 0;
+
+document.getElementById('btn-mode').addEventListener('click', (e) => {
+  currentFormation = (currentFormation + 1) % formations.length;
+  velUniforms.uFormation.value = currentFormation;
+  e.target.textContent = `FORMATION: ${formations[currentFormation].name}`;
+  document.getElementById('hud-mode').textContent = formations[currentFormation].hud;
+});
+
+const palettes = ['ABYSS (深海発光)', 'SUPERNOVA (黄金星雲)', 'CYBER TRENCH (極彩深海)'];
+let currentPalette = 0;
+
+document.getElementById('btn-theme').addEventListener('click', (e) => {
+  currentPalette = (currentPalette + 1) % palettes.length;
+  boidMaterial.uniforms.uPalette.value = currentPalette;
+  e.target.textContent = `PALETTE: ${palettes[currentPalette]}`;
+});
+
+document.getElementById('btn-shock').addEventListener('click', () => {
+  shockwaveLevel = 1.2;
+  triggerSupernovaSound(1.0);
+  document.getElementById('hud-state').textContent = 'SUPERNOVA SHOCKWAVE';
+});
+
+const densities = [
+  { count: 1000000, label: '1,000,000 (100万匹)', hud: '1,000,000 ENTITIES (1000×1000 FBO)' },
+  { count: 500000,  label: '500,000 (50万匹)',   hud: '500,000 ENTITIES (ACTIVE DRAW)' },
+  { count: 250000,  label: '250,000 (25万匹)',   hud: '250,000 ENTITIES (ACTIVE DRAW)' }
+];
+let currentDensityIdx = 0;
+
+document.getElementById('btn-density').addEventListener('click', (e) => {
+  currentDensityIdx = (currentDensityIdx + 1) % densities.length;
+  const d = densities[currentDensityIdx];
+  boidGeometry.setDrawRange(0, d.count);
+  e.target.textContent = `SCALE: ${d.label}`;
+  document.getElementById('hud-count').textContent = d.hud;
+});
+
+document.getElementById('btn-sound').addEventListener('click', (e) => {
+  initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  soundEnabled = !soundEnabled;
+  e.target.textContent = soundEnabled ? 'SONAR AUDIO: ON' : 'SONAR AUDIO: OFF';
+  e.target.classList.toggle('active', soundEnabled);
+  droneGain.gain.setTargetAtTime(soundEnabled ? 0.08 : 0.0, audioCtx.currentTime, 0.2);
+});
+
+// ============================================================================
+// 6. MAIN ANIMATION & GPGPU DISPATCH LOOP
+// ============================================================================
+const clock = new THREE.Clock();
+let frameCount = 0;
+let fpsAccum = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const rawDelta = Math.min(clock.getDelta(), 0.05);
+  const elapsed = clock.getElapsedTime();
+
+  // FPS Counter Update
+  frameCount++;
+  fpsAccum += rawDelta;
+  if (fpsAccum >= 0.5) {
+    document.getElementById('hud-fps').textContent = Math.round(frameCount / fpsAccum);
+    frameCount = 0;
+    fpsAccum = 0;
+  }
+
+  // Handle Singularity Charge & Supernova Shockwave Decay
+  if (isPointerDown) {
+    chargeLevel = Math.min(1.0, chargeLevel + rawDelta * 0.55);
+    const pct = Math.round(chargeLevel * 100);
+    document.getElementById('charge-text').textContent = `SINGULARITY CONVERGENCE: ${pct}%`;
+    document.getElementById('charge-fill').style.width = `${pct}%`;
+  }
+
+  if (shockwaveLevel > 0.001) {
+    shockwaveLevel *= Math.pow(0.08, rawDelta);
+    if (shockwaveLevel < 0.01) {
+      shockwaveLevel = 0.0;
+      if (!isPointerDown) {
+        document.getElementById('hud-state').textContent = 'FREE FLOCKING';
+      }
+    }
+  }
+
+  // Smooth 3D Cursor Velocity Tracking
+  mouseVel3D.subVectors(currentMouse3D, prevMouse3D).divideScalar(Math.max(rawDelta, 0.001));
+  mouseVel3D.clampLength(0, 60);
+  prevMouse3D.copy(currentMouse3D);
+
+  mouseIdleTimer += rawDelta;
+  if (mouseIdleTimer > 4.0 && !isPointerDown) {
+    velUniforms.uMouseActive.value = Math.max(0.0, velUniforms.uMouseActive.value - rawDelta * 0.5);
+  }
+
+  // Update Cursor Core Visual
+  cursorCoreMesh.position.lerp(currentMouse3D, 0.25);
+  const coreScale = 0.4 + chargeLevel * 2.6 + shockwaveLevel * 4.5;
+  cursorCoreMesh.scale.setScalar(coreScale);
+  cursorCoreMat.opacity = isPointerDown ? 0.45 + chargeLevel * 0.45 : Math.max(0.0, velUniforms.uMouseActive.value * 0.22);
+  cursorCoreMat.color.setHSL(0.53 - chargeLevel * 0.42, 1.0, 0.55 + chargeLevel * 0.35);
+
+  // Modulate Ambient Sonar Synth
+  if (soundEnabled && audioCtx) {
+    const cursorSpeed = mouseVel3D.length();
+    const targetFreq = 180 + chargeLevel * 950 + shockwaveLevel * 1200 + Math.min(cursorSpeed * 4, 300);
+    filterNode.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.08);
+    droneOsc1.frequency.setTargetAtTime(55 + chargeLevel * 55, audioCtx.currentTime, 0.1);
+    droneOsc2.frequency.setTargetAtTime(110.5 + chargeLevel * 110, audioCtx.currentTime, 0.1);
+  }
+
+  // Update GPGPU Uniforms
+  posUniforms.uDelta.value = rawDelta;
+  posUniforms.uTime.value = elapsed;
+
+  velUniforms.uDelta.value = rawDelta;
+  velUniforms.uTime.value = elapsed;
+  velUniforms.uMousePos.value.copy(cursorCoreMesh.position);
+  velUniforms.uMouseVel.value.copy(mouseVel3D);
+  velUniforms.uCharge.value = chargeLevel;
+  velUniforms.uShockwave.value = shockwaveLevel;
+
+  // Execute Ping-Pong FBO Compute Shaders
+  gpuCompute.compute();
+
+  // Bind latest computed Position & Velocity textures to the 1,000,000 Particle Shader
+  boidMaterial.uniforms.texturePosition.value = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
+  boidMaterial.uniforms.textureVelocity.value = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
+  boidMaterial.uniforms.uTime.value = elapsed;
+  boidMaterial.uniforms.uCharge.value = chargeLevel;
+  boidMaterial.uniforms.uShockwave.value = shockwaveLevel;
+
+  // Subtle autonomous camera drift
+  if (!isPointerDown) {
+    camera.position.x += Math.sin(elapsed * 0.15) * 0.015;
+    camera.position.y += Math.cos(elapsed * 0.12) * 0.01;
+  }
+
+  controls.update();
+  composer.render();
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+  boidMaterial.uniforms.uPixelRatio.value = renderer.getPixelRatio();
+});
+
+animate();
+</script>
+</body>
+</html>
